@@ -1,0 +1,17 @@
+[project]
+name = "agents"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "dspy-ai>=2.5.43",
+    "openai>=1.58.1",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.1",
+    "pytest>=8.3.4",
+    "trufflehog3>=3.0.10",
+]
