@@ -110,55 +110,10 @@ class GithubRepoExtractor:
             response = self.session.get(repo_url)
             response.raise_for_status()
 
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Extract social counts (stars, watchers, forks)
-            social_counts = {}
-            for link in soup.select("a.Link.Link--muted"):
-                text = link.get_text(strip=True)
-                value = self._parse_count(text)
-
-                if "star" in text.lower():
-                    social_counts["stars"] = value
-                elif "watching" in text.lower():
-                    social_counts["watchers"] = value
-                elif "fork" in text.lower():
-                    social_counts["forks"] = value
-
-            # Extract issues and pull requests counts
-            issues_count = 0
-            pr_count = 0
-
-            for link in soup.select("span.Counter"):
-                parent = link.find_parent("a")
-                if parent:
-                    href = parent.get("href", "")
-                    count = self._parse_count(link.text)
-
-                    if "/issues" in href and "pull" not in href:
-                        issues_count = count
-                    elif "/pulls" in href:
-                        pr_count = count
-
-            # Get repository description
-            description_elem = soup.find("p", {"class": "f4"})
-            description = description_elem.text.strip() if description_elem else None
-
-            # Get last updated time
-            updated_elem = soup.find("relative-time")
-            last_updated = updated_elem.get("datetime") if updated_elem else None
+            parsed_details = self._parse_github_page(response.text)
 
             return GitHubRepo(
-                owner=owner,
-                repo_name=repo_name,
-                full_url=repo_url,
-                stars=social_counts.get("stars", 0),
-                watchers=social_counts.get("watchers", 0),
-                forks=social_counts.get("forks", 0),
-                pull_requests=pr_count,
-                issues=issues_count,
-                description=description,
-                last_updated=last_updated,
+                owner=owner, repo_name=repo_name, full_url=repo_url, **parsed_details
             )
         except requests.exceptions.RequestException as e:
             raise RequestException(f"Failed to fetch repository data: {str(e)}")
@@ -167,7 +122,7 @@ class GithubRepoExtractor:
 
     def extract_github_repos(
         self, url: str, max_depth: int = 1
-    ) -> Dict[str, Any[List[GitHubRepo], List[str]]]:
+    ) -> Dict[str, List[GitHubRepo] | List[str]]:
         """
         Crawl a webpage and extract all GitHub repository URLs.
 
@@ -247,14 +202,104 @@ class GithubRepoExtractor:
             "errors": errors,
         }
 
+    def _parse_social_count(self, text: str) -> int:
+        """Convert GitHub number strings to integers"""
+        if not text:
+            return 0
+
+        text = text.strip().lower().replace(",", "")
+        match = re.search(r"([\d.]+)([km])?", text)
+        if not match:
+            return 0
+
+        number, unit = match.groups()
+        value = float(number)
+
+        if unit == "k":
+            value *= 1000
+        elif unit == "m":
+            value *= 1000000
+
+        return int(value)
+
+        # """Parse numeric count from text"""
+        # return int(''.join(filter(str.isdigit, text)) or 0)
+
+    def _extract_social_counts(self, soup: BeautifulSoup) -> Dict[str, int]:
+        """Extract stars, watchers, and forks counts"""
+        counts = {"stars": 0, "watchers": 0, "forks": 0}
+
+        for link in soup.select("a.Link.Link--muted"):
+            text = link.get_text(strip=True).lower()
+            value = self._parse_social_count(text)
+
+            if "star" in text:
+                counts["stars"] = value
+            elif "watching" in text:
+                counts["watchers"] = value
+            elif "fork" in text:
+                counts["forks"] = value
+
+        return counts
+
+    def _extract_issue_counts(self, soup: BeautifulSoup) -> Dict[str, int]:
+        """Extract issues and pull requests counts"""
+        counts = {"issues": 0, "pull_requests": 0}
+
+        for link in soup.select("span.Counter"):
+            parent = link.find_parent("a")
+            if parent:
+                href = parent.get("href", "")
+                count = self._parse_social_count(link.text)
+
+                if "/issues" in href and "pull" not in href:
+                    counts["issues"] = count
+                elif "/pulls" in href:
+                    counts["pull_requests"] = count
+
+        return counts
+
+    def _parse_github_page(self, html: str) -> Dict[str, int | str | None]:
+        """Parse GitHub repository page and extract all counts"""
+        soup = BeautifulSoup(html, "html.parser")
+        social = self._extract_social_counts(soup)
+        issues = self._extract_issue_counts(soup)
+
+        # Get repository description
+        description_elem = soup.find("p", {"class": "f4"})
+        description = description_elem.text.strip() if description_elem else None
+
+        # Get last updated time
+        updated_elem = soup.find("relative-time")
+        last_updated = updated_elem.get("datetime") if updated_elem else None
+
+        return {
+            "stars": social["stars"],
+            "watchers": social["watchers"],
+            "forks": social["forks"],
+            "issues": issues["issues"],
+            "pull_requests": issues["pull_requests"],
+            "description": description,
+            "last_updated": last_updated,
+        }
+
+
+def get_repos(url: str) -> Dict[str, List[GitHubRepo] | List[str]]:
+    extractor = GithubRepoExtractor(rate_limit_delay=1.0)
+    results: List[GitHubRepo] = []
+    try:
+        results = extractor.extract_github_repos(url)
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+    return results
+
 
 def main() -> None:
-    """Example usage of the GitHub repository extractor"""
-    extractor = GithubRepoExtractor(rate_limit_delay=1.0)
     target_url = "https://contribute.cncf.io/contributors/projects/"  # Replace with your target URL
 
     try:
-        results = extractor.extract_github_repos(target_url, max_depth=1)
+        results = get_repos(target_url)
 
         print(f"\nFound {len(results['repositories'])} unique GitHub repositories:")
         for repo in results["repositories"]:
