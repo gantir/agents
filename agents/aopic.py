@@ -12,7 +12,7 @@ def run() -> None:
     messages: list[dict[str, Any]] = [
         {
             "role": "user",
-            "content": f"Get all the projects from the CNCF contributors page with url {url} and format the output as csv which is excel safe along with summary of key observations and comments about the repos",
+            "content": f"Get all the projects from the CNCF contributors page with url {url} and present the total number of projects, format the output as csv which is excel safe along with summary of key observations and comments about the repos.",
         },
     ]
 

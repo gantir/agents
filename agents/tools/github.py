@@ -46,17 +46,6 @@ class GithubRepoExtractor:
             }
         )
 
-        # Refined regex pattern specifically for repositories
-        # Matches pattern: github.com/owner/repo
-        # Excludes: .git extensions, raw, blob, wiki, issues, pull
-        self.repo_pattern = re.compile(
-            r"https?://(?:www\.)?github\.com/"  # Domain
-            r"([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})/"  # Owner
-            r"([a-zA-Z0-9_.-]{1,100})"  # Repository name
-            r"(?!/(?:raw|blob|wiki|issues|pull|releases|packages|actions))"  # Negative lookahead
-            r'(?:(?:/[^\s)"\']*)?(?=$|\s|\)|\'|\"))?'  # Optional path and boundary
-        )
-
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
@@ -147,27 +136,23 @@ class GithubRepoExtractor:
                 response = self.session.get(current_url, timeout=10)
                 response.raise_for_status()
 
-                # Find all potential repository URLs
-                matches = self.repo_pattern.finditer(response.text)
-
-                repo_urls = set()
-                for match in matches:
-                    """Extract and validate repository information from a regex match"""
-                    owner, repo_name = match.groups()
-                    if owner and repo_name:
-                        repo_urls.add(
-                            (
-                                owner,
-                                repo_name,
-                                f"https://github.com/{owner}/{repo_name}",
-                            )
-                        )
-                # repo_urls = list(repo_urls)[0:10]
+                soup = BeautifulSoup(response.text, "html.parser")
+                repo_urls = {
+                    link["href"]
+                    for link in soup.find_all(
+                        "a", attrs={"title": "Project Repository on GitHub"}
+                    )
+                }
 
                 for repo_url in repo_urls:
                     try:
+                        r = (
+                            repo_url.replace("https://github.com/", "")
+                            .replace("https://www.github.com/", "")
+                            .split("/")
+                        )
                         repo_info: Optional[GitHubRepo] = self.extract_repo_info(
-                            repo_url[0], repo_url[1], repo_url[2]
+                            r[0], r[1], repo_url
                         )
                         # print(f"Found repo {repo_info}")
                         if repo_info:
