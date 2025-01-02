@@ -7,11 +7,12 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from dataclasses_json import DataClassJsonMixin
 from requests.exceptions import RequestException
 
 
 @dataclass(frozen=True)  # Making it immutable for hashability
-class GitHubRepo:
+class GitHubRepo(DataClassJsonMixin):
     """Data class to store GitHub repository information"""
 
     owner: str
@@ -121,7 +122,7 @@ class GithubRepoExtractor:
             raise ValueError(f"Error parsing repository data: {str(e)}")
 
     def extract_github_repos(
-        self, url: str, max_depth: int = 1
+        self, url: str, max_depth: int = 0
     ) -> Dict[str, List[GitHubRepo] | List[str]]:
         """
         Crawl a webpage and extract all GitHub repository URLs.
@@ -161,13 +162,14 @@ class GithubRepoExtractor:
                                 f"https://github.com/{owner}/{repo_name}",
                             )
                         )
+                # repo_urls = list(repo_urls)[0:10]
 
                 for repo_url in repo_urls:
                     try:
                         repo_info: Optional[GitHubRepo] = self.extract_repo_info(
                             repo_url[0], repo_url[1], repo_url[2]
                         )
-                        print(f"Found repo {repo_info}")
+                        # print(f"Found repo {repo_info}")
                         if repo_info:
                             found_repos.add(repo_info)
                     except Exception:
@@ -288,7 +290,7 @@ def get_repos(url: str) -> Dict[str, List[GitHubRepo] | List[str]]:
     extractor = GithubRepoExtractor(rate_limit_delay=1.0)
     results: List[GitHubRepo] = []
     try:
-        results = extractor.extract_github_repos(url)
+        results = extractor.extract_github_repos(url).get("repositories", [])
     except Exception as e:
         print(f"Error: {str(e)}")
 
