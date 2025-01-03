@@ -137,12 +137,12 @@ class GithubRepoExtractor:
                 response.raise_for_status()
 
                 soup = BeautifulSoup(response.text, "html.parser")
-                repo_urls = {
+                repo_urls = [
                     link["href"]
                     for link in soup.find_all(
                         "a", attrs={"title": "Project Repository on GitHub"}
                     )
-                }
+                ]
 
                 for repo_url in repo_urls:
                     try:
